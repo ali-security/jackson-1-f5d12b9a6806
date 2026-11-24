@@ -1,0 +1,82 @@
+name: seal-build
+
+# Upstream jackson-1 (codehaus) has no GitHub Actions CI; this workflow mirrors
+# the project's own Ant build: `ant jars.asl` for the jar and `ant test` for the
+# JUnit suite (ant/build-test.xml), on JDK 6 (the public 1.9.2 jar manifest says
+# Created-By: 1.6.0_26) with Ant 1.8.4.
+on:
+  workflow_dispatch:
+    inputs:
+      test-filter:
+        description: "Space-separated fully-qualified test class names to run instead of the full suite"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zulu JDK 6 and Ant 1.8.4
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/tools"
+          cd "$HOME/tools"
+          curl -fsSL -o jdk6.tar.gz https://cdn.azul.com/zulu/bin/zulu6.22.0.3-jdk6.0.119-linux_x64.tar.gz
+          tar xzf jdk6.tar.gz
+          curl -fsSL -o ant.tar.gz https://archive.apache.org/dist/ant/binaries/apache-ant-1.8.4-bin.tar.gz
+          tar xzf ant.tar.gz
+          echo "JAVA_HOME=$HOME/tools/zulu6.22.0.3-jdk6.0.119-linux_x64" >> "$GITHUB_ENV"
+          echo "ANT_HOME=$HOME/tools/apache-ant-1.8.4" >> "$GITHUB_ENV"
+          echo "$HOME/tools/apache-ant-1.8.4/bin" >> "$GITHUB_PATH"
+          echo "$HOME/tools/zulu6.22.0.3-jdk6.0.119-linux_x64/bin" >> "$GITHUB_PATH"
+
+      - name: Show toolchain
+        run: |
+          java -version
+          ant -version
+
+      - name: Build jars (ant jars.asl)
+        run: ant jars.asl
+
+      - name: Run tests
+        env:
+          TEST_FILTER: ${{ inputs.test-filter }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TEST_FILTER" ]; then
+            for t in $TEST_FILTER; do
+              ant test.single -Dtest="$t"
+            done
+          else
+            ant test
+          fi
+
+      - name: Test summary
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import glob, xml.etree.ElementTree as ET
+          files = sorted(glob.glob('test/results/xml/TEST-*.xml'))
+          classes = tests = failures = errors = skipped = 0
+          for f in files:
+              r = ET.parse(f).getroot()
+              name = r.get('name')
+              t = int(r.get('tests', 0)); fl = int(r.get('failures', 0)); e = int(r.get('errors', 0))
+              classes += 1; tests += t; failures += fl; errors += e
+              print("SUITE %s tests=%d failures=%d errors=%d" % (name, t, fl, e))
+              if name.startswith('org.codehaus.jackson.map.interop') or name.startswith('org.codehaus.jackson.map.ext'):
+                  for tc in r.findall('testcase'):
+                      status = 'FAILED' if (tc.find('failure') is not None or tc.find('error') is not None) else ('SKIPPED' if tc.find('skipped') is not None else 'PASSED')
+                      print("TEST %s.%s %s" % (tc.get('classname'), tc.get('name'), status))
+          print("TOTAL classes=%d tests=%d failures=%d errors=%d skipped=%d passed=%d" % (classes, tests, failures, errors, skipped, tests - failures - errors - skipped))
+          EOF
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: jackson-mapper-asl
+          path: build/jackson-mapper-asl-*.jar
+          if-no-files-found: error

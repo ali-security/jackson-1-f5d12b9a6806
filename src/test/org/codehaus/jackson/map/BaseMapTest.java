@@ -141,8 +141,8 @@ public abstract class BaseMapTest
         assertEquals(-42, n.asInt(-42));
         assertEquals(0, n.asLong());
         assertEquals(12345678901L, n.asLong(12345678901L));
-        assertEquals(0.0, n.asDouble());
-        assertEquals(-19.25, n.asDouble(-19.25));
+        assertEquals(0.0, n.asDouble(), 0.0);
+        assertEquals(-19.25, n.asDouble(-19.25), 0.0);
     }
     
     protected void assertNodeNumbers(JsonNode n, int expInt, double expDouble)
@@ -151,8 +151,8 @@ public abstract class BaseMapTest
         assertEquals(expInt, n.asInt(-42));
         assertEquals((long) expInt, n.asLong());
         assertEquals((long) expInt, n.asLong(19L));
-        assertEquals(expDouble, n.asDouble());
-        assertEquals(expDouble, n.asDouble(-19.25));
+        assertEquals(expDouble, n.asDouble(), 0.0);
+        assertEquals(expDouble, n.asDouble(-19.25), 0.0);
     }
     
     /*
