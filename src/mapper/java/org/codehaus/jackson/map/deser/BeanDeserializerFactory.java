@@ -8,6 +8,7 @@ import org.codehaus.jackson.map.deser.impl.CreatorCollector;
 import org.codehaus.jackson.map.deser.impl.CreatorProperty;
 import org.codehaus.jackson.map.deser.std.ThrowableDeserializer;
 import org.codehaus.jackson.map.introspect.*;
+import org.codehaus.jackson.map.jsontype.impl.SubTypeValidator;
 import org.codehaus.jackson.map.type.*;
 import org.codehaus.jackson.map.util.ArrayBuilders;
 import org.codehaus.jackson.map.util.ClassUtil;
@@ -231,6 +232,12 @@ public class BeanDeserializerFactory
      * @since 1.7
      */
     protected final Config _factoryConfig;
+
+    /**
+     *
+     * @since 1.9.14
+     */
+    protected SubTypeValidator _subtypeValidator = SubTypeValidator.instance();
 
     @Deprecated
     public BeanDeserializerFactory() {
@@ -579,6 +586,7 @@ public class BeanDeserializerFactory
         if (!isPotentialBeanType(type.getRawClass())) {
             return null;
         }
+        checkIllegalTypes(type);
         // Use generic bean introspection to build deserializer
         return buildBeanDeserializer(config, type, beanDesc, property);
     }
@@ -1377,5 +1385,16 @@ public class BeanDeserializerFactory
             }
         }
         return status;
+    }
+
+    /**
+     * @since 1.9.14
+     */
+    protected void checkIllegalTypes(JavaType type) throws JsonMappingException
+    {
+        // There are certain nasty classes that could cause problems, mostly
+        // via default typing -- catch them here.
+        _subtypeValidator.validateSubType(type);
+        //throw new JsonMappingException("Illegal type (" + full + ") to deserialize: prevented for security reasons");
     }
 }
